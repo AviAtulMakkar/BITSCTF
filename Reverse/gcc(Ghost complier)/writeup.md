@@ -8,7 +8,7 @@ A "safe-to-use" C compiler wrapper that claims to match GCC's runtime speed. The
 **Given:**
 - `ghost_compiler` — A stripped Linux ELF executable.
 - `chall.zip` — The challenge archive containing the clean binary.
-- `README.md` — Basic instructions and the `BITSCTF{...}` flag format.
+- `README.md` — Basic instructions and the flag format.
 
 ## Analysis
 
@@ -21,26 +21,21 @@ However, the critical twist lies in the binary's self-destruct mechanism. When e
 4. Wipes the 64-byte payload in memory using `memset(..., 0, 0x40)`.
 5. Overwrites the original executable on the disk with this wiped version.
 
-Because executing the file permanently destroys the embedded flag, writing a C payload to print `flag.txt` is a distraction. The challenge must be solved entirely offline using static analysis against a fresh, un-run binary.
+Because executing the file permanently destroys the embedded flag, the challenge must be solved entirely offline using static analysis against a fresh, un-run binary.
 
 ## Solution Approach
 
 ### Strategy: Static Analysis + Custom Offline Decryption
 
-Since the binary self-modifies, we must extract a pristine copy from `chall.zip` and reverse engineer the encryption logic using a decompiler (like Ghidra):
+Since the binary self-modifies, we must extract a pristine copy from `chall.zip` and reverse engineer the encryption logic:
 
-1. **Locate the Payload (`FUN_00101349`):** The binary searches itself for an 8-byte magic header (`9A A5 22 E8 1E FA 91 90`) to find the exact offset of the 64-byte encrypted flag.
-2. **Generate the Key (`FUN_001014b5`):** The binary calculates a 64-bit master key by reading its own file byte-by-byte.  It uses the well-known FNV-1a hashing algorithm (identified by the prime `0x100000001b3` and offset `0xcbf29ce484222325`), intentionally skipping the 64-byte payload during the calculation. The final hash is XORed with the constant `0xcafebabe00000000`.
-3. **Decrypt the Flag (`FUN_00101583`):** The algorithm loops through the payload, XORing each encrypted byte with the lowest byte of the 64-bit master key. After each byte, the 64-bit key is rotated right by 1 bit.
-
-We can emulate this exact logic in a Python script to calculate the file's hash, generate the key, and decrypt the payload without ever executing the trap.
+1. **Locate the Payload:** The binary searches itself for an 8-byte magic header (`9A A5 22 E8 1E FA 91 90`) to find the exact offset of the 64-byte encrypted flag.
+2. **Generate the Key:** The binary calculates a 64-bit master key by reading its own file byte-by-byte.  It uses the FNV-1a hashing algorithm (identified by the prime `0x100000001b3` and offset `0xcbf29ce484222325`), intentionally skipping the 64-byte payload during calculation. The final hash is XORed with `0xcafebabe00000000`.
+3. **Decrypt the Flag:** The algorithm loops through the payload, XORing each encrypted byte with the lowest byte of the master key. After each byte, the 64-bit key is rotated right by 1 bit.
 
 ### Solver Code
 
-See `solve.py` for the complete implementation. Key techniques:
-- Reading the binary in `rb` mode to avoid execution.
-- Implementing the 64-bit FNV-1a hash while bypassing the target offset.
-- Bitwise ROR (Rotate Right) implementation for the 64-bit master key state.
+We can emulate this logic in Python to calculate the file's hash, generate the key, and decrypt the payload offline. Save this as `solve.py` and run it in the same directory as a fresh `ghost_compiler` binary.
 
 ```python
 def solve():
@@ -55,6 +50,8 @@ def solve():
         print("[-] Payload not found. Use a fresh binary.")
         return
 
+    print(f"[+] Encrypted payload found at offset: {hex(offset)}")
+
     # FNV-1a Hash generation
     hash_val = 0xcbf29ce484222325
     for i in range(len(data)):
@@ -65,6 +62,7 @@ def solve():
 
     # XOR with magic constant to derive master key
     master_key = hash_val ^ 0xcafebabe00000000
+    print(f"[+] Master Key Calculated: {hex(master_key)}")
     
     # Decrypt payload
     payload = data[offset : offset + 64]
@@ -82,3 +80,18 @@ def solve():
 
 if __name__ == "__main__":
     solve()
+```
+
+## Result
+
+Running the Python script against a pristine copy of the executable successfully calculates the FNV-1a hash and decrypts the hidden payload without triggering the self-deletion trap.
+
+```text
+[+] Encrypted payload found at offset: 0x4020
+[+] Master Key Calculated: [REDACTED_HASH]
+[+] Decrypted Flag:BITSCTF{n4n0m1t3s_4nd_s3lf_d3struct_0ur0b0r0s}}
+```
+
+## Flag
+
+`BITSCTF{n4n0m1t3s_4nd_s3lf_d3struct_0ur0b0r0s}`
