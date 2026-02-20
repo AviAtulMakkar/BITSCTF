@@ -26,5 +26,37 @@ The challenge provides a UPX-packed, stripped ELF binary containing a heavily gu
 - Leveraged a hidden debug environment variable (`PRINT_FLAG_CHAR=1`) found during static analysis to force the VM to print its output.
 - Executed the binary to trigger the VM bypass:
 
-  ```bash
-  sudo env PRINT_FLAG_CHAR=1 LD_PRELOAD=./fake.so ./challenge_unpacked.1 real.lic
+```bash
+sudo env PRINT_FLAG_CHAR=1 LD_PRELOAD=./fake.so ./challenge_unpacked.1 real.lic
+```
+
+### Step 4: Extraction
+
+- The VM executed successfully but used our incorrect dummy license as the decryption key. This resulted in the VM dumping a garbled version of the flag to the terminal: `y3r_by_lE3r_y0u_uN4v3l_my_cr375}`
+- Recognizing that the output was partially readable, we applied a context-based reconstruction of the leetspeak rather than brute-forcing the VM's custom stream cipher.
+- Reconstructed the garbled fragments into standard CTF leetspeak matching the challenge theme:
+
+| Garbled Fragment | Reconstructed Value |
+| :--- | :--- |
+| `y3r_by_lE3r` | `l4y3r_by_l4y3r` |
+| `y0u_uN4v3l` | `y0u_unr4v3l` |
+| `my_cr375` | `my_53cr375` |
+
+- Concatenating the reconstructed fragments inside the known `BITSCTF{}` prefix yields the final flag.
+
+---
+
+## Flag
+
+```text
+BITSCTF{l4y3r_by_l4y3r_y0u_unr4v3l_my_53cr375}
+```
+
+---
+
+## Tools Used
+
+- **UPX** – Decompressing the initial binary.
+- **ltrace / strace** – Dynamic tracing of library calls and signals (`SIGILL`).
+- **Ghidra** – Static analysis and decompilation to locate the `DEBUG` environment variables and VM entry point.
+- **LD_PRELOAD (fake.so)** – Bypassing the anti-analysis gauntlet by hooking standard C library calls.
