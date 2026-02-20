@@ -1,6 +1,6 @@
-# CREST-CTF Writeups
+#BITSCTF Writeups
 
-A collection of writeups from the CREST-CTF.
+A collection of writeups from the BITSCTF.
 
 ## Table of Contents
 
