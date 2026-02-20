@@ -1,13 +1,55 @@
-ApproachThe challenge provides a custom Python implementation of AES reduced to 4 rounds, along with an output.txt file containing an encrypted flag, a key_hint, and 1000 plaintext-ciphertext samples. While the reduced rounds and large number of samples strongly suggest a Square Attack (Integral Cryptanalysis), a closer look at the key hint reveals a much simpler path. Instead of complex mathematical cryptanalysis, we leverage a multiprocessed Known-Plaintext brute-force attack in Python to find the missing bytes of the key and decrypt the flag.Step 1: Initial AnalysisReviewed the provided aes.py script. It implements a standard AES structure (SubBytes, ShiftRows, MixColumns, AddRoundKey) but strictly limits the execution to only 4 rounds.Inspected the output.txt file, which contains three key pieces of information: an encrypted_flag hex string, 1000 pairs of plaintext and ciphertext samples, and a key_hint string (26ab77cadcca0ed41b03c8f2e5).Step 2: Bypassing the Square Attack Red HerringA 4-round AES implementation paired with exactly 1000 samples is the classic textbook setup for a Square Attack. However, this relies on finding specific byte invariants, which can be brittle if the samples aren't perfectly structured $\Lambda$-sets.Key Observation: Counting the length of the key_hint string (26ab77cadcca0ed41b03c8f2e5) reveals it is 26 hex characters long, which translates to exactly 13 bytes.Since standard AES strictly requires a 16-byte key, we are only missing 3 bytes. This means there are only $256 \times 256 \times 256$ ($2^{24}$, or roughly 16.7 million) possible combinations. A brute-force attack is completely viable and less prone to parsing errors than integral cryptanalysis.Step 3: Known-Plaintext Brute-Force AttackWe extracted a single valid plaintext and ciphertext pair from the samples list to act as our oracle.Because pure Python bitwise operations are slow, a single-threaded script would take too long to check 16.7 million AES encryptions.Bypass: We wrote a custom Python script utilizing the multiprocessing library to distribute the workload. By dividing the first missing byte's 256 possibilities across all available CPU cores, we drastically reduced the execution time.Python# Core logic of the Python brute-forcer
-def check_first_byte(b1):
-    for b2 in range(256):
-        for b3 in range(256):
-            guess_key = KEY_HINT + bytes([b1, b2, b3])
-            cipher = AES(guess_key) # Using the provided custom AES class
-            
-            # Known-Plaintext check
-            if cipher.encrypt(PT) == EXPECTED_CT:
-                return guess_key
-    return None
-Step 4: Key Recovery & DecryptionExecuted the brute-force script using 20 CPU cores.The script successfully chewed through the combinations, finishing the search in 1562.8 seconds (~26 minutes).Result: The script successfully matched the ciphertext and recovered the exact 16-byte key: 26ab77cadcca0ed41b03c8f2e5cdec0c.With the full key recovered, we initialized the custom AES class one final time to decrypt the encrypted_flag hex string, revealing the readable text.FlagPlaintextBITSCTF{7h3_qu1ck_br0wn_f0x_jump5_0v3r_7h3_l4zy_d0g}
-Tools UsedPython (multiprocessing) – Automating the Known-Plaintext brute-force attack concurrently across multiple CPU cores.Custom AES Script – Reusing the challenge creator's exact Python classes to ensure perfect 1:1 encryption/decryption logic.
+# BITSCTF: AES 4-Round Key Recovery Write-up
+
+## 🚩 Challenge Overview
+The challenge provides a custom Python implementation of AES reduced to **4 rounds**. We are given an `output.txt` file containing:
+* An **encrypted flag** (hex string).
+* A **key_hint** (13 bytes provided).
+* **1000 plaintext-ciphertext samples**.
+
+---
+
+## 🕵️ Step 1: Initial Analysis
+The provided `aes.py` script implements a standard AES structure—`SubBytes`, `ShiftRows`, `MixColumns`, and `AddRoundKey`—but strictly limits execution to 4 rounds. 
+
+The `key_hint` provided is `26ab77cadcca0ed41b03c8f2e5`. 
+* **Hint Length:** 26 hex characters = **13 bytes**.
+* **AES Key Requirement:** 16 bytes.
+* **Missing Data:** 3 bytes ($2^{24}$ combinations).
+
+---
+
+## 💡 Step 2: Bypassing the "Square Attack" Red Herring
+A 4-round AES implementation paired with exactly 1000 samples is the classic textbook setup for a **Square Attack** (Integral Cryptanalysis). However, this relies on finding specific byte invariants, which can be brittle if the samples aren't perfectly structured.
+
+Since we are only missing 3 bytes, there are only $256^3$ (roughly 16.7 million) possible combinations. A **Known-Plaintext Brute-Force** attack is completely viable, faster to implement, and less prone to parsing errors than complex mathematical cryptanalysis.
+
+| Metric | Value |
+| :--- | :--- |
+| **Total Combinations** | $256^3 = 16,777,216$ |
+| **Complexity** | $\approx 2^{24}$ (Low for modern CPUs) |
+| **Strategy** | Multiprocessing Brute-Force |
+
+---
+
+## 🛠️ Step 3: Implementation
+Because pure Python bitwise operations are slow, we utilized the `multiprocessing` library to distribute the search space across all available CPU cores. The logic involves iterating through the missing 3 bytes and checking them against a known plaintext-ciphertext pair.
+
+*(See `sol.py` for the full implementation)*
+
+---
+
+## 🔑 Step 4: Key Recovery & Decryption
+The script was executed using 20 CPU cores and successfully matched the ciphertext.
+
+* **Search Time:** 1562.8 seconds (~26 minutes).
+* **Recovered Full Key:** `26ab77cadcca0ed41b03c8f2e5cdec0c`
+* **Decryption Process:** We initialized the custom `AES` class with the recovered 16-byte key to decrypt the `encrypted_flag` hex string.
+
+### 🏆 Final Flag
+> `BITSCTF{7h3_qu1ck_br0wn_f0x_jump5_0v3r_7h3_l4zy_d0g}`
+
+---
+
+## 🧰 Tools Used
+* **Python (multiprocessing):** To automate the concurrent Known-Plaintext attack.
+* **Custom AES Script:** Reusing the challenge creator's exact Python classes to ensure perfect 1:1 encryption/decryption logic.
